@@ -14,6 +14,7 @@ To install just one:
 
 ```bash
 npx skills add SEORY0/zest-skill --skill zest
+npx skills add SEORY0/zest-skill --skill zest-ctf
 npx skills add SEORY0/zest-skill --skill zest-triage
 ```
 
@@ -22,11 +23,12 @@ npx skills add SEORY0/zest-skill --skill zest-triage
 | Skill | For |
 | --- | --- |
 | [`zest`](skills/zest/SKILL.md) | Encode, decode, hash, encrypt, decrypt and inspect data with the local `zest` CLI. |
+| [`zest-ctf`](skills/zest-ctf/SKILL.md) | Solve CTF challenge artifacts with the local `zest` CLI when the task asks to find a flag, decode nested encodings, inspect obfuscated bytes, or triage crypto/misc/light-forensics/reversing puzzle data. |
 | [`zest-triage`](skills/zest-triage/SKILL.md) | Triage an unknown or suspicious artefact — a file, a captured blob, a log, a phishing mail, an obfuscated string — using the local `zest` CLI. |
 
 ## The CLI
 
-Both skills drive the `zest` command. Install it once — it needs Node 20 or newer:
+The skills drive the `zest` command. Install it once — it needs Node 20 or newer:
 
 ```bash
 git clone https://github.com/SEORY0/zest.git
@@ -43,8 +45,9 @@ $ echo 'U0dWc2JHOHNJSGR2Y214a0lRPT0=' | zest magic:depth=2
     Hello, world!
 ```
 
-There is a browser version at <https://seory0.github.io/zest/> for when a command line is not
-available.
+There is a browser version at <https://seory0.github.io/zest/> for non-sensitive data when a
+command line is unavailable. Do not load secrets, private captures or suspicious samples into
+a remotely hosted page.
 
 ## Note
 
