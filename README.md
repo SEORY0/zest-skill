@@ -55,8 +55,9 @@ a remotely hosted page.
 ## Note
 
 This repository is generated. `skills/` is mirrored from the
-[main repository](https://github.com/SEORY0/zest), where `references/operations.md` is built
-from the operation registry itself — so the catalogue an agent reads always matches the code.
-Open issues and pull requests there.
+[main repository](https://github.com/SEORY0/zest). The `zest`, `zest-ctf`, and
+`zest-triage` operation references are built from the operation registry; `zest-crypto`
+ships its own reviewed attack-card catalogue and validators. Open issues and pull requests in
+the main repository.
 
 MIT licensed.
