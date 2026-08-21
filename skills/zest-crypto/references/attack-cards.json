@@ -1,0 +1,944 @@
+[
+  {
+    "schema_version": 2,
+    "id": "rsa.wiener.small-d",
+    "version": 1,
+    "title": "Wiener attack on a small RSA private exponent",
+    "canonical_family_id": "rsa.small-private-exponent",
+    "family_aliases": ["small d", "continued-fraction RSA"],
+    "summary": "Recover a sufficiently small RSA private exponent from convergents of e/n, accepting only an exact prime factorization.",
+    "parameter_signature": ["rsa.modulus", "rsa.public_exponent", "rsa.public_exponent_ratio"],
+    "signals": [
+      {"id": "large-public-exponent", "when": {"fact": "rsa.public_exponent_ratio", "op": "gt", "value": 0.5}, "weight": 30, "reason": "A public exponent large relative to n is consistent with a small private exponent."}
+    ],
+    "requires": [
+      {"id": "public-key-known", "when": {"all": [{"fact": "rsa.modulus", "op": "exists"}, {"fact": "rsa.public_exponent", "op": "exists"}]}, "reason": "The continued-fraction scan requires the exact RSA modulus and public exponent."}
+    ],
+    "rejects": [
+      {"id": "convergents-disproved", "when": {"fact": "rsa.factorization_verified", "op": "eq", "value": false}, "reason": "A bounded convergent scan found no exact RSA factorization."}
+    ],
+    "negative_matches": [
+      {"id": "already-factored", "when": {"fact": "rsa.factorization_verified", "op": "eq", "value": true}, "reason": "The modulus is already factored, so private-key reconstruction is no longer an attack-selection problem.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "scan-convergents", "instruction": "Scan at most 4096 convergents of e/n; retain a candidate only if its discriminant is a square and the two distinct proven-prime factors multiply to n.", "max_seconds": 10, "produces_facts": ["rsa.factorization_verified", "rsa.private_exponent"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "At most 4096 continued-fraction convergents and exact integer checks."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled bounded solver uses standard-library integer arithmetic."}
+    ],
+    "template": "assets/solver-templates/rsa_wiener.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Copy the template into the case and supply n, e, ciphertext, and max_convergents no greater than 4096."},
+      {"id": "apply-bound", "instruction": "Treat the classical d < n^(1/4)/3 regime as sufficient, not necessary; outside it, a failed scan rejects this card but does not prove RSA security."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1109/18.54902", "title": "Cryptanalysis of short RSA secret exponents", "url": "https://doi.org/10.1109/18.54902", "year": 1990, "section": "Continued-fraction attack and small-d sufficient bound", "assumptions": ["RSA uses two suitably balanced primes and the secret exponent lies in the paper's sufficient small-exponent regime."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "zest-rsa-wiener-template", "event": "Zest crypto package", "year": 2026, "source_kind": "local", "repo_url": null, "repo_sha": null, "source_path": "assets/solver-templates/rsa_wiener.py", "source_lines": "L1-L241", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Verify p*q=n, p and q are distinct primes, and e*d is congruent to 1 modulo (p-1)(q-1); decrypt and re-encrypt the supplied ciphertext."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "rsa.common-modulus.coprime-exponents",
+    "version": 1,
+    "title": "RSA common modulus with coprime exponents",
+    "canonical_family_id": "rsa.common-modulus",
+    "family_aliases": ["common modulus", "Bezout RSA"],
+    "summary": "Recover one unpadded message encrypted under one modulus with two coprime public exponents.",
+    "parameter_signature": ["rsa.modulus", "rsa.public_exponents", "rsa.ciphertexts", "rsa.same_plaintext", "rsa.exponents_coprime"],
+    "signals": [
+      {"id": "two-exponents", "when": {"fact": "rsa.public_exponents", "op": "len_eq", "value": 2}, "weight": 35, "reason": "Two exponent samples under a scalar modulus match the common-modulus equation."}
+    ],
+    "requires": [
+      {"id": "common-modulus-instance", "when": {"all": [{"fact": "rsa.modulus", "op": "exists"}, {"fact": "rsa.public_exponents", "op": "len_eq", "value": 2}, {"fact": "rsa.ciphertexts", "op": "len_eq", "value": 2}, {"fact": "rsa.same_plaintext", "op": "eq", "value": true}, {"fact": "rsa.exponents_coprime", "op": "eq", "value": true}]}, "reason": "The Bezout recovery requires one modulus, two aligned ciphertexts of one message, and coprime exponents."}
+    ],
+    "rejects": [
+      {"id": "messages-or-exponents-disagree", "when": {"any": [{"fact": "rsa.same_plaintext", "op": "eq", "value": false}, {"fact": "rsa.exponents_coprime", "op": "eq", "value": false}]}, "reason": "Different messages or non-coprime exponents invalidate the direct Bezout equation."}
+    ],
+    "negative_matches": [
+      {"id": "distinct-moduli-broadcast", "when": {"fact": "rsa.moduli", "op": "len_gte", "value": 2}, "reason": "A list of distinct moduli is a broadcast instance, not this scalar common-modulus card.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "check-bezout-inputs", "instruction": "Check gcd(e1,e2)=1 and that each ciphertext is invertible whenever its Bezout coefficient is negative.", "max_seconds": 5, "produces_facts": ["rsa.exponents_coprime"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "One extended gcd, at most two modular inversions, and two public-equation checks."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled solver uses standard-library modular arithmetic."}
+    ],
+    "template": "assets/solver-templates/rsa_common_modulus.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Supply the scalar modulus, exactly two exponents, and their aligned ciphertexts to the copied template."},
+      {"id": "combine-powers", "instruction": "Find a,b with a*e1+b*e2=1 and compute c1^a*c2^b mod n, using verified modular inverses for negative coefficients."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1080/0161-118491859060", "title": "A further weakness in the common modulus protocol for the RSA cryptoalgorithm", "url": "https://doi.org/10.1080/0161-118491859060", "year": 1984, "section": "Common-modulus recovery with relatively prime exponents", "assumptions": ["The same representative is encrypted modulo the same RSA modulus with relatively prime public exponents."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "zest-rsa-common-modulus-template", "event": "Zest crypto package", "year": 2026, "source_kind": "local", "repo_url": null, "repo_sha": null, "source_path": "assets/solver-templates/rsa_common_modulus.py", "source_lines": "L1-L202", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Verify m^e1 mod n equals c1 and m^e2 mod n equals c2; printable decoding is not proof."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "rsa.hastad.broadcast",
+    "version": 1,
+    "title": "Hastad broadcast attack for exponent three",
+    "canonical_family_id": "rsa.low-public-exponent-broadcast",
+    "family_aliases": ["broadcast RSA", "CRT cube-root RSA"],
+    "summary": "Recover one unpadded message sent with e=3 under at least three pairwise-coprime RSA moduli.",
+    "parameter_signature": ["rsa.moduli", "rsa.public_exponent", "rsa.ciphertexts", "rsa.same_plaintext", "rsa.moduli_pairwise_coprime"],
+    "signals": [
+      {"id": "broadcast-shape", "when": {"all": [{"fact": "rsa.public_exponent", "op": "eq", "value": 3}, {"fact": "rsa.moduli", "op": "len_gte", "value": 3}]}, "weight": 55, "reason": "Exponent three and three or more moduli form the standard sufficient broadcast shape."}
+    ],
+    "requires": [
+      {"id": "aligned-coprime-broadcast", "when": {"all": [{"fact": "rsa.moduli", "op": "len_gte", "value": 3}, {"fact": "rsa.public_exponent", "op": "eq", "value": 3}, {"fact": "rsa.ciphertexts", "op": "len_gte", "value": 3}, {"fact": "rsa.same_plaintext", "op": "eq", "value": true}, {"fact": "rsa.moduli_pairwise_coprime", "op": "eq", "value": true}]}, "reason": "This v1 card deliberately covers only the sufficient e=3 case with three aligned samples and pairwise-coprime moduli."}
+    ],
+    "rejects": [
+      {"id": "broadcast-precondition-failed", "when": {"any": [{"fact": "rsa.same_plaintext", "op": "eq", "value": false}, {"fact": "rsa.moduli_pairwise_coprime", "op": "eq", "value": false}]}, "reason": "Different plaintexts or shared modulus factors invalidate the direct CRT exact-root route."}
+    ],
+    "negative_matches": [
+      {"id": "common-modulus-shape", "when": {"fact": "rsa.modulus", "op": "exists"}, "reason": "A scalar modulus with multiple exponents belongs to the common-modulus family.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "pairwise-gcd-and-root", "instruction": "Check every modulus pair by gcd, CRT-combine exactly three aligned ciphertexts, and demand an exact integer cube root.", "max_seconds": 10, "produces_facts": ["rsa.moduli_pairwise_coprime"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "Quadratic pairwise gcd checks for at most 64 samples, one CRT, and one exact cube root."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled template provides bounded CRT and exact-root arithmetic."}
+    ],
+    "template": "assets/solver-templates/rsa_hastad.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Copy the template and supply exponent 3, aligned moduli and ciphertexts, plus a stated maximum root bit length."},
+      {"id": "demand-exact-root", "instruction": "Reject the hypothesis if CRT yields no exact cube; do not round a numerical root."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1137/0217019", "title": "Solving simultaneous modular equations of low degree", "url": "https://doi.org/10.1137/0217019", "year": 1988, "section": "Simultaneous low-degree modular equations and low-exponent RSA consequence", "assumptions": ["The same sufficiently small message satisfies aligned low-degree congruences modulo distinct relatively prime moduli; this card restricts to e=3 and at least three samples."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "zest-rsa-hastad-template", "event": "Zest crypto package", "year": 2026, "source_kind": "local", "repo_url": null, "repo_sha": null, "source_path": "assets/solver-templates/rsa_hastad.py", "source_lines": "L1-L223", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Verify the recovered integer is an exact cube before reduction and re-encrypt it under every supplied modulus."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "rsa.franklin-reiter.related-message",
+    "version": 1,
+    "title": "Franklin-Reiter related-message RSA",
+    "canonical_family_id": "rsa.related-message-affine-e-3-5-7",
+    "family_aliases": ["Franklin-Reiter", "affinely related RSA messages"],
+    "summary": "Recover low-exponent RSA messages connected by a known affine relation by taking a polynomial gcd modulo n.",
+    "parameter_signature": ["rsa.modulus", "rsa.public_exponent", "rsa.ciphertexts", "rsa.message_relation_type"],
+    "signals": [
+      {"id": "affine-related-messages", "when": {"fact": "rsa.message_relation_type", "op": "contains", "value": "affine"}, "weight": 55, "reason": "A known invertible affine message relation is the direct Franklin-Reiter signal."}
+    ],
+    "requires": [
+      {"id": "related-message-instance", "when": {"all": [{"fact": "rsa.modulus", "op": "exists"}, {"fact": "rsa.public_exponent", "op": "in", "value": [3, 5, 7]}, {"fact": "rsa.ciphertexts", "op": "len_gte", "value": 2}, {"fact": "rsa.message_relation_type", "op": "contains", "value": "affine"}]}, "reason": "The polynomial construction requires one modulus, a small public exponent, two ciphertexts, and an explicit affine relation."}
+    ],
+    "rejects": [
+      {"id": "identical-message-case", "when": {"fact": "rsa.same_plaintext", "op": "eq", "value": true}, "reason": "Identical-message samples should route to common-modulus or broadcast RSA rather than related-message gcds."}
+    ],
+    "negative_matches": [
+      {"id": "distinct-moduli", "when": {"fact": "rsa.moduli", "op": "len_gte", "value": 2}, "reason": "This polynomial gcd card requires a shared scalar modulus.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "polynomial-gcd-degree", "instruction": "Build f1(X)=X^e-c1 and f2(X)=(aX+b)^e-c2 in (Z/nZ)[X]; reject unless their monic gcd is linear and its root satisfies both congruences.", "max_seconds": 20, "produces_facts": ["construction.toy_invariant_verified"]}
+    ],
+    "expected_cost": {"class": "medium", "notes": "Two degree-at-most-seven modular polynomials and a bounded gcd; composite-coefficient failures require explicit handling."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Reliable polynomial arithmetic over Z/nZ is required; the skill never installs SageMath."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "In a copied case solver, construct the two modular polynomials from the observed affine coefficients, implement a monic Euclidean gcd that surfaces non-units, require degree one, extract the root, and bound all polynomial degrees by e."},
+      {"id": "handle-zero-divisors", "instruction": "If leading-coefficient inversion fails, compute its gcd with n; record any resulting factorization as a different exact route rather than hiding the failure."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eurocrypt:1996-coppersmith-franklin-patarin-reiter", "title": "Low-exponent RSA with related messages", "url": "https://users.ece.cmu.edu/~reiter/papers/1996/Eurocrypt.pdf", "year": 1996, "section": "Related-message attack via polynomial gcd", "assumptions": ["The messages obey a known invertible affine relation, share one RSA modulus and small exponent, and the modular polynomial gcd exposes the expected linear factor."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [],
+    "verification": [
+      {"kind": "equation", "instruction": "Substitute the recovered messages into the affine relation and both RSA ciphertext congruences modulo n."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "lattice.coppersmith.univariate-small-root",
+    "version": 1,
+    "title": "Coppersmith univariate modular small root",
+    "canonical_family_id": "lattice.univariate-small-root",
+    "family_aliases": ["Coppersmith small roots", "univariate modular root"],
+    "summary": "Find a bounded root of a monic univariate polynomial modulo an integer, within the cited theorem's sufficient bound.",
+    "parameter_signature": ["lattice.polynomial", "lattice.modulus", "lattice.unknown_bound", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "small-roots-clue", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "monic-univariate"}, "weight": 45, "reason": "A monic univariate modular polynomial is the supported Coppersmith shape."}
+    ],
+    "requires": [
+      {"id": "verified-univariate-instance", "when": {"all": [{"fact": "lattice.polynomial", "op": "exists"}, {"fact": "lattice.modulus", "op": "exists"}, {"fact": "lattice.unknown_bound", "op": "gte", "value": 1}, {"fact": "construction.parameter_signature", "op": "contains", "value": "monic-univariate"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The exact polynomial, modulus, positive bound, monicity, and a reduced invariant must be established before lattice work."}
+    ],
+    "rejects": [
+      {"id": "toy-root-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The faithful reduced instance did not reproduce the claimed small-root relation."}
+    ],
+    "negative_matches": [
+      {"id": "multivariate-polynomial", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "multivariate"}, "reason": "The bundled solver and cited card are univariate; a multivariate heuristic is a different route.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "bound-and-toy-check", "instruction": "Normalize the polynomial to monic form only when the leading coefficient is invertible, verify the claimed bound against the cited degree/beta regime, and solve a faithful reduced instance.", "max_seconds": 30, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "Sage small_roots with degree at most 16, caller-supplied X, beta denominator at most 64, and at most 1024 returned roots."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "The bundled template uses Sage polynomial rings and small_roots; missing Sage is a blocked state."}
+    ],
+    "template": "assets/solver-templates/coppersmith_univariate.sage",
+    "procedure": [
+      {"id": "map-polynomial", "instruction": "Record coefficients in ascending degree order, the exact modulus, X bound, beta, and max_roots before copying the template."},
+      {"id": "respect-sufficient-bound", "instruction": "For beta=1 and monic degree delta, require the claimed root magnitude below the cited N^(1/delta) sufficient bound; do not call the bound necessary."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1007/3-540-68339-9_14", "title": "Finding a small root of a univariate modular equation", "url": "https://doi.org/10.1007/3-540-68339-9_14", "year": 1996, "section": "Univariate monic modular small-root theorem", "assumptions": ["A monic degree-d polynomial has a root modulo the relevant divisor and the absolute root is inside the theorem's stated sufficient bound."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "zest-coppersmith-template", "event": "Zest crypto package", "year": 2026, "source_kind": "local", "repo_url": null, "repo_sha": null, "source_path": "assets/solver-templates/coppersmith_univariate.sage", "source_lines": "L1-L207", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "For every returned root, evaluate the original integer polynomial and verify the required modular divisor witness and strict absolute bound."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "signature.ecdsa.reused-nonce",
+    "version": 1,
+    "title": "ECDSA repeated-nonce key recovery",
+    "canonical_family_id": "signature.ecdsa-nonce-reuse",
+    "family_aliases": ["repeated r", "ECDSA nonce reuse"],
+    "summary": "Recover an ECDSA nonce and private scalar from two valid signatures whose nonce points share an x-coordinate, including the k and q-k repeated-r relations.",
+    "parameter_signature": ["signature.scheme", "signature.sample_count", "signature.public_key_present", "signature.repeated_r"],
+    "signals": [
+      {"id": "repeated-r", "when": {"fact": "signature.repeated_r", "op": "eq", "value": true}, "weight": 80, "reason": "Two valid ECDSA signatures sharing r are the direct nonce-reuse signal."}
+    ],
+    "requires": [
+      {"id": "two-valid-reused-r-signatures", "when": {"all": [{"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, {"fact": "signature.sample_count", "op": "gte", "value": 2}, {"fact": "signature.public_key_present", "op": "eq", "value": true}, {"fact": "signature.repeated_r", "op": "eq", "value": true}]}, "reason": "Recovery and independent proof require two valid ECDSA samples, the public key, and a repeated r value."}
+    ],
+    "rejects": [
+      {"id": "distinct-r-values", "when": {"fact": "signature.repeated_r", "op": "eq", "value": false}, "reason": "Distinct r values disprove exact nonce reuse; test partial or related nonces instead."}
+    ],
+    "negative_matches": [],
+    "cheap_probes": [
+      {"id": "recover-and-check-two", "instruction": "Try both k=(z1-z2)/(s1-s2) mod q and k=(z1-z2)/(s1+s2) mod q when each denominator is invertible, derive d=(s1*k-z1)/r mod q, and accept exactly one candidate only after proving dG=Q, both original public signature equations, and both signed nonce-point relations.", "max_seconds": 10, "produces_facts": ["construction.toy_invariant_verified"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "A constant number of scalar inversions and curve multiplications on an audited domain."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled solver supports proven small domains and exact secp256k1/P-256 parameters without third-party imports."}
+    ],
+    "template": "assets/solver-templates/ecdsa_nonce_reuse.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Copy the template, supply the exact curve domain, subgroup order, public key, and two (r,s,z) samples, and keep the built-in domain checks."},
+      {"id": "preserve-hash-semantics", "instruction": "Map each message to the exact z value used by the challenge, including truncation rules, before applying the equations."},
+      {"id": "try-opposite-nonce-sign", "instruction": "When equal r values may come from nonce scalars k and q-k, try both s2 and -s2 modulo q and verify every resulting (k,d) candidate against both signatures and dG=Q; do not assume repeated r proves identical nonce scalars."}
+    ],
+    "citations": [
+      {"kind": "standard", "paper_id": "doi:10.6028/NIST.FIPS.186-5", "title": "Digital Signature Standard (DSS)", "url": "https://doi.org/10.6028/NIST.FIPS.186-5", "year": 2023, "section": "Section 6.4 ECDSA signature generation and verification", "assumptions": ["Both signatures are valid ECDSA signatures in one prime-order subgroup, use the exact message representatives, and their nonce points are equal or exact inverses with the same r."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "zest-ecdsa-reuse-template", "event": "Zest crypto package", "year": 2026, "source_kind": "local", "repo_url": null, "repo_sha": null, "source_path": "assets/solver-templates/ecdsa_nonce_reuse.py", "source_lines": "L1-L297", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Verify dG equals the public key; both original public ECDSA verification equations pass; each signed nonce scalar satisfies its private signature equation and reproduces the exact verifier nonce point; and the two nonce points are equal or exact inverses as reported."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "signature.ecdsa.partial-nonce-hnp",
+    "version": 1,
+    "title": "ECDSA partial-nonce hidden-number attack",
+    "canonical_family_id": "signature.ecdsa-partial-nonce-hnp",
+    "family_aliases": ["HNP ECDSA", "biased ECDSA nonce"],
+    "summary": "Map ECDSA signatures into an HNP only after selecting a source-backed known-bit or bias model and proving its parameter-dependent sample, orientation, group-size, and error bounds.",
+    "parameter_signature": ["signature.scheme", "signature.sample_count", "signature.public_key_present", "signature.nonce_leak_bits", "signature.nonce_bias_bound", "signature.nonce_leak_orientation", "signature.hnp_model", "signature.hnp_parameter_bound_verified"],
+    "signals": [
+      {"id": "nonce-information", "when": {"any": [{"fact": "signature.nonce_leak_bits", "op": "gte", "value": 2}, {"fact": "signature.nonce_bias_bound", "op": "gte", "value": 1}]}, "weight": 55, "reason": "Measured nonce bits or an explicit error bound can instantiate an HNP."}
+    ],
+    "requires": [
+      {"id": "bounded-hnp-instance", "when": {"any": [{"all": [{"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, {"fact": "signature.sample_count", "op": "gte", "value": 1}, {"fact": "signature.public_key_present", "op": "eq", "value": true}, {"fact": "signature.hnp_model", "op": "eq", "value": "known-bits"}, {"fact": "signature.nonce_leak_orientation", "op": "in", "value": ["msb", "lsb"]}, {"fact": "signature.nonce_leak_bits", "op": "gte", "value": 1}, {"fact": "signature.hnp_parameter_bound_verified", "op": "eq", "value": true}]}, {"all": [{"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, {"fact": "signature.sample_count", "op": "gte", "value": 1}, {"fact": "signature.public_key_present", "op": "eq", "value": true}, {"fact": "signature.hnp_model", "op": "eq", "value": "eprint-2019-023-bias"}, {"fact": "signature.nonce_leak_orientation", "op": "eq", "value": "centered-bias"}, {"fact": "signature.nonce_bias_bound", "op": "gte", "value": 1}, {"fact": "signature.hnp_parameter_bound_verified", "op": "eq", "value": true}]}]}, "reason": "Eligibility is the union of two coupled source models: verified MSB/LSB known bits with positive leak width, or the verified ePrint 2019/023 centered-bias model with a positive bias bound. Cross-model tuples are rejected, and neither branch has a universal sample floor."}
+    ],
+    "rejects": [
+      {"id": "exact-nonce-reuse", "when": {"fact": "signature.repeated_r", "op": "eq", "value": true}, "reason": "Exact nonce reuse has a cheaper closed-form recovery and should be attempted first."}
+    ],
+    "negative_matches": [
+      {"id": "nonce-recurrence-family", "when": {"fact": "signature.nonce_recurrence", "op": "exists"}, "reason": "An explicit algebraic nonce recurrence belongs to the related-nonce card unless it is first reduced to a quantified HNP error model.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "derive-hnp-and-toy", "instruction": "Derive each modular approximation from s_i*k_i=z_i+r_i*d mod q, state whether bits are MSB or LSB, compute the error bound, and validate the same embedding on a reduced instance.", "max_seconds": 30, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "One parameterized lattice reduction whose dimension is bounded by the recorded sample count; retry budgets must be stated before execution."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "The solver outline requires exact modular arithmetic and lattice reduction; missing Sage is reported as blocked."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Create a Sage solver that normalizes each signature equation, constructs the HNP lattice with the proved bit orientation and error bound, runs one stated LLL/BKZ schedule, enumerates only a bounded neighborhood, and verifies every candidate public key."},
+      {"id": "check-sufficiency", "instruction": "Use the cited parameter analysis to justify sample count versus leaked bits; the presence of any leak is necessary evidence but is not by itself sufficient for recovery."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1023/A:1025436905711", "title": "The insecurity of the elliptic curve digital signature algorithm with partially known nonces", "url": "https://doi.org/10.1023/A:1025436905711", "year": 2003, "section": "ECDSA known-bit nonce reductions and parameter bounds", "assumptions": ["Valid signatures expose correctly oriented known nonce bits with enough independent samples for the selected reduction model."], "verified_on": "2026-08-21"},
+      {"kind": "paper", "paper_id": "eprint:2019/023", "title": "Biased nonce sense: lattice attacks against weak ECDSA nonces in cryptocurrencies", "url": "https://eprint.iacr.org/2019/023", "year": 2019, "section": "Bias-specific ECDSA nonce models and lattice parameterization", "assumptions": ["Use this citation only when the measured bias matches its model; it does not turn arbitrary positive bias metadata into a universal HNP guarantee."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [],
+    "verification": [
+      {"kind": "verifier", "instruction": "Require dG to equal the supplied public key and verify every input signature; also confirm each reconstructed nonce obeys the claimed bit or bias bound."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "prng.mt19937.state-clone",
+    "version": 1,
+    "title": "MT19937 state cloning from aligned outputs",
+    "canonical_family_id": "prng.mt19937-state-recovery",
+    "family_aliases": ["Mersenne Twister clone", "MT untemper"],
+    "summary": "Recover the 624-word MT19937 state from 624 consecutive aligned full 32-bit outputs and predict later outputs.",
+    "parameter_signature": ["prng.family", "prng.output_count", "prng.output_word_bits", "prng.outputs_aligned"],
+    "signals": [
+      {"id": "full-state-window", "when": {"all": [{"fact": "prng.output_count", "op": "gte", "value": 624}, {"fact": "prng.output_word_bits", "op": "eq", "value": 32}]}, "weight": 70, "reason": "At least 624 full 32-bit outputs cover one MT19937 state window."}
+    ],
+    "requires": [
+      {"id": "aligned-mt19937-window", "when": {"all": [{"fact": "prng.family", "op": "eq", "value": "mt19937"}, {"fact": "prng.output_count", "op": "gte", "value": 624}, {"fact": "prng.output_word_bits", "op": "eq", "value": 32}, {"fact": "prng.outputs_aligned", "op": "eq", "value": true}]}, "reason": "Direct cloning requires consecutive aligned, untruncated 32-bit MT19937 outputs."}
+    ],
+    "rejects": [
+      {"id": "misaligned-or-wrong-width", "when": {"any": [{"fact": "prng.outputs_aligned", "op": "eq", "value": false}, {"fact": "prng.output_word_bits", "op": "neq", "value": 32}]}, "reason": "Misalignment or truncation invalidates the direct 624-word untemper route."}
+    ],
+    "negative_matches": [
+      {"id": "different-generator", "when": {"fact": "prng.family", "op": "neq", "value": "mt19937"}, "reason": "The tempering inverse is specific to MT19937.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "temper-round-trip", "instruction": "Untemper one observed word, reapply the exact MT19937 tempering map, and demand the original 32-bit word before cloning all 624 entries.", "max_seconds": 5, "produces_facts": ["construction.toy_invariant_verified"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "Exactly 624 word inversions, one twist, and a bounded prediction comparison."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "A standard-library bitwise implementation is sufficient."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Implement inverse right-xor-shift and masked left-xor-shift operations for the published tempering map, untemper exactly 624 consecutive words, install them as state with the correct index, generate only the requested predictions, and compare held-out outputs."},
+      {"id": "preserve-word-order", "instruction": "Record byte order, API transformations, skipped draws, and whether outputs are full words; do not treat textual random values as aligned without proof."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1145/272991.272995", "title": "Mersenne Twister: A 623-dimensionally equidistributed uniform pseudo-random number generator", "url": "https://doi.org/10.1145/272991.272995", "year": 1998, "section": "MT19937 recurrence, 624-word state, and tempering transformation", "assumptions": ["The outputs are consecutive full 32-bit words from MT19937 with the standard recurrence and tempering map."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [],
+    "verification": [
+      {"kind": "round-trip", "instruction": "Retemper every reconstructed state word and predict a held-out sequence beyond the 624-word recovery window exactly."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "oracle.cbc-padding",
+    "version": 1,
+    "title": "CBC padding-response oracle",
+    "canonical_family_id": "oracle.cbc-padding",
+    "family_aliases": ["Vaudenay oracle", "padding oracle"],
+    "summary": "Recover exactly one CBC plaintext byte when chosen ciphertexts produce a stable padding-validity response and the effective case budget covers 256 guesses plus ambiguity controls.",
+    "parameter_signature": ["oracle.kind", "oracle.distinguishable_response", "oracle.chosen_ciphertext", "oracle.query_budget", "oracle.recovery_bytes"],
+    "signals": [
+      {"id": "padding-response-class", "when": {"all": [{"fact": "oracle.kind", "op": "eq", "value": "cbc-padding"}, {"fact": "oracle.distinguishable_response", "op": "eq", "value": true}]}, "weight": 65, "reason": "A stable validity class under CBC ciphertext mutation is the defining observable."}
+    ],
+    "requires": [
+      {"id": "authorized-stable-one-byte-oracle", "when": {"all": [{"fact": "oracle.kind", "op": "eq", "value": "cbc-padding"}, {"fact": "oracle.distinguishable_response", "op": "eq", "value": true}, {"fact": "oracle.chosen_ciphertext", "op": "eq", "value": true}, {"fact": "oracle.recovery_bytes", "op": "eq", "value": 1}, {"fact": "oracle.query_budget", "op": "gte", "value": 258}]}, "reason": "This deliberately narrow probe requires one declared recovery byte and an effective budget of 256 guesses plus two stability or ambiguity controls."}
+    ],
+    "rejects": [
+      {"id": "response-not-distinguishable", "when": {"fact": "oracle.distinguishable_response", "op": "eq", "value": false}, "reason": "Without a reproducible padding-validity bit, the Vaudenay-style oracle is absent."}
+    ],
+    "negative_matches": [
+      {"id": "gm-bit-wrapper", "when": {"fact": "oracle.kind", "op": "eq", "value": "goldwasser-micali-key-wrapper"}, "reason": "The service distinguishes wrapper keys, not CBC padding validity.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "one-byte-control-probe", "instruction": "Recover one final-block byte with at most 256 guesses, reserve two queries for a known-valid control and an ambiguity perturbation, and stop without claiming block or message recovery.", "max_seconds": 30, "produces_facts": ["oracle.distinguishable_response", "oracle.recovery_bytes"]}
+    ],
+    "expected_cost": {"class": "oracle-bound", "notes": "Exactly one byte, at most 256 guesses, and two control queries; effective budget is the lower of oracle.query_budget and constraints.max_oracle_queries."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "A bounded transcript-replay client can be implemented with standard-library I/O against an authorized endpoint or local harness."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Write a case-local one-byte probe that mutates only the predecessor block's final byte, uses a fixed guess order, confirms an ambiguous valid-padding hit with one second perturbation, logs every query and response, and aborts at the effective cap."},
+      {"id": "recover-one-byte", "instruction": "Recover one intermediate byte, XOR it with the original predecessor byte, prove that byte against a local harness, and make no blockwise or full-plaintext claim."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eurocrypt:2002-vaudenay-cbc-padding", "title": "Security flaws induced by CBC padding: applications to SSL, IPSEC, WTLS", "url": "https://www.iacr.org/archive/eurocrypt2002/23320530/cbc02_e02d.pdf", "year": 2002, "section": "CBC padding validity side channel", "assumptions": ["The adversary may submit chosen CBC ciphertexts and reliably distinguish padding-valid from padding-invalid processing under a fixed key."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [],
+    "verification": [
+      {"kind": "transcript-replay", "instruction": "Replay the bounded one-byte transcript against a local harness or authorized endpoint and independently verify the single recovered plaintext byte."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.matrix-product.trace-lattice",
+    "version": 1,
+    "title": "Matrix-product trace-invariant attack routing",
+    "canonical_family_id": "paper.matrix-product-trace-attack",
+    "family_aliases": ["MatProd", "trace-lattice routing label"],
+    "summary": "Route matrix-product trapdoor instances only after a trace or characteristic-polynomial invariant from the published attack is reproduced; trace-lattice is a catalog label, not a theorem name.",
+    "parameter_signature": ["construction.canonical_family", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "matrix-product-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2024/1332"}, "weight": 55, "reason": "The exact cryptanalysis paper is stronger evidence than a generic matrix clue."},
+      {"id": "matrix-product-parameters", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "matrix-products-fp"}, "weight": 25, "reason": "Ordered matrix products over a finite field match the attacked blueprint family."}
+    ],
+    "requires": [
+      {"id": "verified-matrix-product-family", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "paper.matrix-product.trace-lattice"}, {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2024/1332"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/MatProd/dist/chall.py:L6-L60"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/MatProd/dist/chall.py:L199-L228"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "matrix-products-fp"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The exact pinned construction span and concrete direct/alternating instantiation-output span, attack paper, matching matrix-product parameter shape, and reproduced invariant are mandatory."}
+    ],
+    "rejects": [
+      {"id": "trace-invariant-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The reduced trace/characteristic-polynomial invariant failed for the challenge mapping."}
+    ],
+    "negative_matches": [
+      {"id": "generic-matrix-algebra", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "generic-matrix-algebra-only"}, "reason": "Generic matrix use without the attacked product structure does not justify this paper route.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "reproduce-trace-invariant", "instruction": "On a reduced challenge instance, compute the exact trace, determinant, or characteristic-polynomial relation used by ePrint 2024/1332 and map every paper symbol to one source anchor.", "max_seconds": 60, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "One bounded Sage model with the challenge's matrix dimension and field size recorded; no generic LLL sweep."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Finite-field matrix and lattice calculations require an installed Sage runtime."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Build a Sage model of the exact ordered-product public data, derive only the invariant stated in ePrint 2024/1332, reduce it to the challenge's unknowns, apply a dimension- and coefficient-bounded lattice only where the derivation calls for it, and replay the recovered product."},
+      {"id": "separate-blueprint-from-attack", "instruction": "Use ePrint 2023/1745 for construction definitions and ePrint 2024/1332 for the attack; never attribute the trace attack theorem to the blueprint paper."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eprint:2024/1332", "title": "Attacking trapdoors from matrix products", "url": "https://eprint.iacr.org/2024/1332", "year": 2024, "section": "Trace, determinant, and characteristic-polynomial attacks", "assumptions": ["The challenge instantiates the attacked matrix-product trapdoor shape and the selected public invariant maps exactly to the challenge variables."], "verified_on": "2026-08-21"},
+      {"kind": "paper", "paper_id": "eprint:2023/1745", "title": "New public-key cryptosystem blueprints using matrix products in F_p", "url": "https://eprint.iacr.org/2023/1745", "year": 2023, "section": "Matrix-product blueprint definitions", "assumptions": ["This citation defines the construction family; it is not cited as the source of the later trace attack."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:hitcon-2024-matprod", "title": "MatProd challenge construction", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/MatProd/dist/chall.py#L6-L60", "year": 2024, "section": "Pinned matrix-product base and direct-product construction", "assumptions": ["The paper mapping is applied only to this exact source span."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:hitcon-2024-matprod-output", "title": "MatProd concrete challenge instance", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/MatProd/dist/chall.py#L199-L228", "year": 2024, "section": "Direct and alternating parameters, challenge generation, and serialized output", "assumptions": ["The concrete parameter and output mapping is tied to this exact source span."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "hitcon-2024-matprod", "event": "HITCON CTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2024/MatProd/dist/chall.py", "source_lines": "L6-L60", "inference_level": "inferred"},
+      {"challenge_id": "hitcon-2024-matprod-output", "event": "HITCON CTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2024/MatProd/dist/chall.py", "source_lines": "L199-L228", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Reconstruct the ordered matrix product or trapdoor output and verify every public trace, determinant, characteristic-polynomial, and ciphertext relation used by the solver."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.stream-cipher.fca-lwpm",
+    "version": 1,
+    "title": "Fast-correlation adaptation via low-weight polynomial multiples",
+    "canonical_family_id": "paper.stream-cipher-fca-lwpm",
+    "family_aliases": ["FCA", "LWPM", "Hyper512"],
+    "summary": "Route a stream-cipher correlation attack through a verified low-weight polynomial multiple only when the observed recurrence, correlation and available-keystream bounds match the cited construction.",
+    "parameter_signature": ["construction.canonical_family", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "lwpm-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2007/423"}, "weight": 55, "reason": "The exact LWPM paper is an actionable adaptation source."},
+      {"id": "lwpm-shape", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "low-weight-polynomial-multiple"}, "weight": 25, "reason": "A recurrence-polynomial multiple with a measured correlation is the required family shape."}
+    ],
+    "requires": [
+      {"id": "verified-lwpm-family", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "paper.stream-cipher.fca-lwpm"}, {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2007/423"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/Hyper512/dist/chall.py:L4-L64"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "low-weight-polynomial-multiple"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The exact polynomial family, pinned source mapping, and a faithful LWPM/correlation toy result must be established before the expensive attack."}
+    ],
+    "rejects": [
+      {"id": "lwpm-toy-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The candidate multiple or its predicted correlation failed on a reduced instance."}
+    ],
+    "negative_matches": [
+      {"id": "plain-fca-infeasible", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "plain-fast-correlation-only"}, "reason": "A generic FCA label without a feasible polynomial multiple and data bound is not this route.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "lwpm-toy-probe", "instruction": "Construct the proposed multiple on a reduced recurrence, verify divisibility over F_2, count its weight, and measure the predicted parity bias on held-out keystream before scaling.", "max_seconds": 60, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "One bounded LWPM lattice with explicit maximum degree/weight and a separate FCA sample/time estimate; stop when either bound is exceeded."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Polynomial arithmetic over F_2 and lattice reduction need an installed Sage runtime."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Implement the ePrint 2007/423 lattice for the observed feedback polynomial and maximum multiple degree, verify each short vector is an exact multiple with the requested constant term and weight, then feed only verified parity checks to a separately bounded correlation decoder."},
+      {"id": "state-feasibility", "instruction": "Record available keystream, estimated bias, target multiple weight, lattice dimension, memory, and expected FCA work before execution; paper-family similarity alone is not sufficient."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eprint:2007/423", "title": "Finding low weight polynomial multiples using lattices", "url": "https://eprint.iacr.org/2007/423", "year": 2007, "section": "LWPM lattice construction and complexity discussion", "assumptions": ["The feedback polynomial is known over F_2, the requested degree bound matches available keystream, and a sufficiently low-weight multiple makes the subsequent correlation stage feasible."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:hitcon-2024-hyper512", "title": "Hyper512 challenge source", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/Hyper512/dist/chall.py#L4-L64", "year": 2024, "section": "Pinned recurrence and stream construction", "assumptions": ["The LWPM adaptation is applied only to this exact source span."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "hitcon-2024-hyper512", "event": "HITCON CTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2024/Hyper512/dist/chall.py", "source_lines": "L4-L64", "inference_level": "inferred"}
+    ],
+    "verification": [
+      {"kind": "verifier", "instruction": "Verify polynomial divisibility and weight exactly, recover a state/key candidate, and replay all held-out keystream bits rather than relying on correlation score alone."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.ecdsa.lcg-nonce",
+    "version": 1,
+    "title": "ECDSA algebraically related LCG nonces",
+    "canonical_family_id": "paper.ecdsa-related-nonce-recurrence",
+    "family_aliases": ["ECDSA LCG", "polynonce", "ECLCG"],
+    "summary": "Recover the ECLCG private scalar only through its cross-modulus bridge: integer LCG states evolve modulo a 311-bit p while ECDSA exposes their reductions modulo group order q, with p different from q.",
+    "parameter_signature": ["signature.scheme", "signature.sample_count", "signature.nonce_recurrence", "signature.nonce_projection_bound_verified", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "ecdsa-lcg-recurrence", "when": {"all": [{"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, {"fact": "signature.nonce_recurrence", "op": "contains", "value": "lcg"}]}, "weight": 70, "reason": "An observed LCG recurrence in ECDSA nonces is the direct family signal."},
+      {"id": "ecdsa-adaptation-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2023/305"}, "weight": 25, "reason": "The ECDSA-specific related-nonce paper supplies the mapping missing from the older DSS theorem."}
+    ],
+    "requires": [
+      {"id": "mapped-ecdsa-recurrence", "when": {"all": [{"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, {"fact": "signature.sample_count", "op": "gte", "value": 17}, {"fact": "signature.nonce_recurrence", "op": "eq", "value": "lcg-mod-p-observed-mod-q"}, {"fact": "signature.nonce_projection_bound_verified", "op": "eq", "value": true}, {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2023/305"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/ECLCG/dist/chall.py:L25-L64"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/ECLCG/solution/solve_lance_roy.sage:L8-L50"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "lcg-modulus-p-differs-from-ecdsa-order-q"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "bounded-mod-p-to-mod-q-nonce-lifts"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "orthogonal-lattice-stern-bridge"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The pinned ECLCG route requires all 17 aligned signatures, p != q, bounded integer lifts from mod p to mod q, the author solution's n=14/t=4 orthogonal projection, a verified Stern inequality, and a faithful cross-modulus toy replay."}
+    ],
+    "rejects": [
+      {"id": "exact-reuse-cheaper", "when": {"fact": "signature.repeated_r", "op": "eq", "value": true}, "reason": "Exact nonce reuse has a cheaper closed-form attack and should route there first."}
+    ],
+    "negative_matches": [
+      {"id": "dss-lift-unmapped", "when": {"fact": "construction.negative_matches_checked", "op": "contains", "value": "dss-to-ecdsa-mapping-missing"}, "reason": "The 1997 BGM theorem is for DSS; an ECDSA lift without a written equation mapping is rejected.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "cross-modulus-orthogonal-toy", "instruction": "On a reduced p != q instance, derive adjacent ECDSA nonce-difference vectors modulo q, recover a short integer-orthogonal vector, reconstruct p and the LCG multiplier, explicitly verify the Stern projection bound, and require the known private scalar to replay both modulus layers.", "max_seconds": 60, "produces_facts": ["signature.nonce_projection_bound_verified", "construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "For the pinned 17-signature instance use n=14 and t=4, verify the author solver's Stern inequality before reduction, then run only the stated resultant, polynomial-gcd, and mixed-modulus lattice stages."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Finite-field elimination, polynomial roots, and any lattice stage require an installed Sage runtime."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Follow the pinned 17-signature author route with n=14 and t=4: derive vectors from adjacent ECDSA nonce differences modulo q, find short integer-orthogonal vectors, recover the separate LCG modulus p by resultants and its multiplier by polynomial gcd, then solve the bounded mixed-modulus lattice for d."},
+      {"id": "enforce-stern-bridge", "instruction": "Before reduction, verify the source-specific p != q model and the author bound ||lambda||_1 * 2^high_bits < 2^(lcg_bits*(1-1/t)); never substitute nonce residues modulo q directly into a recurrence modulo p."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "crypto:1997-bgm-dss-lcg", "title": "Pseudo-random generators within cryptographic applications: the DSS case", "url": "https://cseweb.ucsd.edu/~mihir/papers/dss-lcg.pdf", "year": 1997, "section": "DSS signatures with LCG-generated nonces", "assumptions": ["This theorem concerns DSS nonce generation; applying it to ECDSA requires a separate, explicit algebraic mapping."], "verified_on": "2026-08-21"},
+      {"kind": "paper", "paper_id": "eprint:2023/305", "title": "A novel related nonce attack for ECDSA", "url": "https://eprint.iacr.org/2023/305", "year": 2023, "section": "Same-modulus LCG and higher-degree recurrence elimination for ECDSA", "assumptions": ["This paper supports the generic same-modulus related-nonce family; the pinned ECLCG p != q adaptation additionally requires the challenge author solution's orthogonal-lattice and Stern bridge."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:hitcon-2024-eclcg", "title": "ECLCG challenge source", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/ECLCG/dist/chall.py#L25-L64", "year": 2024, "section": "Separate 311-bit LCG modulus p and secp256k1 ECDSA order q", "assumptions": ["The source revision and exact line span match the fingerprint anchor."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:hitcon-2024-eclcg", "title": "ECLCG author solution notes", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/ECLCG/README.md#L21-L90", "year": 2024, "section": "Orthogonal lattice, resultants, polynomial gcd, and mixed-modulus recovery", "assumptions": ["The challenge adaptation follows the pinned author derivation rather than silently collapsing p and q."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:hitcon-2024-eclcg-stern", "title": "ECLCG orthogonal and Stern implementation", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202024/ECLCG/solution/solve_lance_roy.sage#L8-L50", "year": 2024, "section": "Seventeen signatures, n=14, t=4, orthogonal lattice, and the checked Stern inequality", "assumptions": ["Eligibility requires this exact projection dimension and its parameter-bound check to hold for the captured instance."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "hitcon-2024-eclcg", "event": "HITCON CTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2024/ECLCG/dist/chall.py", "source_lines": "L25-L64", "inference_level": "inferred"}
+    ],
+    "verification": [
+      {"kind": "verifier", "instruction": "Verify dG equals the public key, all 17 reconstructed integer states satisfy the recurrence modulo p, their reductions satisfy every ECDSA equation modulo q, and the exact n=14/t=4 Stern projection inequality plus every mixed-modulus lift bound holds."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.wagner.generalized-birthday",
+    "version": 1,
+    "title": "Wagner generalized birthday list merge",
+    "canonical_family_id": "paper.generalized-birthday-k-sum",
+    "family_aliases": ["Wagner k-sum", "generalized birthday"],
+    "summary": "Apply a bounded generalized-birthday merge only to independent list choices with the required XOR or modular-sum relation and balanced filtering bits.",
+    "parameter_signature": ["construction.canonical_family", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "wagner-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "doi:10.1007/3-540-45708-9_19"}, "weight": 50, "reason": "The canonical generalized-birthday paper is directly identified."},
+      {"id": "independent-lists", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "independent-k-lists"}, "weight": 35, "reason": "Independent list choices are essential to the balanced merge tree."}
+    ],
+    "requires": [
+      {"id": "verified-k-list-instance", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "paper.wagner.generalized-birthday"}, {"fact": "construction.paper_ids", "op": "contains", "value": "doi:10.1007/3-540-45708-9_19"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202025/Paranoid/README.md:L15-L31"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "independent-k-lists"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "Exact list independence, group operation, target relation, pinned Paranoid source mapping, and a toy merge must be proven before scaling."}
+    ],
+    "rejects": [
+      {"id": "merge-toy-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The reduced merge tree did not preserve the target relation."}
+    ],
+    "negative_matches": [
+      {"id": "adaptive-query-schedule", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "adaptive-query-schedule"}, "reason": "Adaptive sequential queries do not form Wagner's independent k-list input; this explicitly rejects naive Wagner routing for MAT347.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "four-list-toy", "instruction": "Reduce to four bounded lists, run the exact pair-sum merge, and verify that one selected element per independent list satisfies the original target relation.", "max_seconds": 30, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "List count, list length, modulus bits, merge levels, memory cap, and collision cap must be fixed before execution."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled four-list template provides a bounded exact-sum model."}
+    ],
+    "template": "assets/solver-templates/wagner_generalized_birthday.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Use the four-list template only after mapping the challenge operation and target; for more lists, build a balanced merge tree with explicit filtered-bit and retained-candidate caps."},
+      {"id": "preserve-independence", "instruction": "Reject reductions where later list elements depend on earlier queries or choices unless a separate proof restores the paper's list model."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1007/3-540-45708-9_19", "title": "A generalized birthday problem", "url": "https://www.iacr.org/archive/crypto2002/24420288/24420288.pdf", "year": 2002, "section": "k-list XOR problem and balanced merge algorithm", "assumptions": ["The input is represented as independent lists with a specified group operation and target, and list sizes support the chosen merge/filter schedule."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:hitcon-2025-paranoid", "title": "Paranoid intended-solution notes", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/HITCON%20CTF%202025/Paranoid/README.md#L15-L31", "year": 2025, "section": "Independent lists and Wagner merge route", "assumptions": ["Paranoid is the positive mapping; Pedantic remains a non-Wagner variant."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "hitcon-2025-paranoid", "event": "HITCON CTF 2025", "year": 2025, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2025/Paranoid/README.md", "source_lines": "L15-L31", "inference_level": "direct"},
+      {"challenge_id": "hitcon-2025-pedantic", "event": "HITCON CTF 2025", "year": 2025, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "HITCON CTF 2025/Pedantic/src/server.py", "source_lines": "L29-L80", "inference_level": "variant"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Recompute the original group sum or XOR from exactly one selected element per input list and verify the challenge target without relying on intermediate collision bits."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.frost.threshold-signature",
+    "version": 1,
+    "title": "FROST threshold-signature construction routing",
+    "canonical_family_id": "paper.frost-threshold-schnorr",
+    "family_aliases": ["FROST", "threshold Schnorr shares"],
+    "summary": "Model FROST commitments, binding factors, Lagrange coefficients and share equations precisely; the FROST paper is a construction and security proof, not a generic exploit claim.",
+    "parameter_signature": ["signature.scheme", "signature.sample_count", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "frost-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2020/852"}, "weight": 50, "reason": "The source identifies the FROST construction."},
+      {"id": "frost-share-shape", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "frost-signing-share"}, "weight": 30, "reason": "Commitment and signing-share data match FROST's multi-party equations."}
+    ],
+    "requires": [
+      {"id": "verified-frost-transcript", "when": {"all": [{"fact": "signature.scheme", "op": "eq", "value": "schnorr-threshold"}, {"fact": "signature.sample_count", "op": "gte", "value": 2}, {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2020/852"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/project-sekai-ctf/sekaictf-2025@683dd81ae520581add40ec21c4819866e28cbde4/crypto/law-and-order/challenge/app/chall.py:L150-L311"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "frost-signing-share"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "An exact threshold-Schnorr transcript, pinned source mapping, and verified share equation are required; the paper title alone is insufficient."}
+    ],
+    "rejects": [
+      {"id": "ordinary-ecdsa", "when": {"fact": "signature.scheme", "op": "eq", "value": "ecdsa"}, "reason": "ECDSA signatures do not satisfy the FROST Schnorr share equations."}
+    ],
+    "negative_matches": [
+      {"id": "single-party-schnorr", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "single-party-schnorr"}, "reason": "A single-party Schnorr wrapper has no threshold-share surface for this card.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "share-equation-toy", "instruction": "Recompute binding factors, group commitment, participant Lagrange coefficients, and each public share-verification equation on a reduced transcript before hypothesizing any wrapper weakness.", "max_seconds": 30, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "medium", "notes": "A bounded transcript parser and one group-equation check per supplied share; any exploit search needs a separately justified wrapper invariant."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "A case-local group-arithmetic model can be written in Python for the challenge's published domain."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Implement the exact FROST transcript equations from the paper, map participant identifiers and commitments from the challenge, validate every honest share, then isolate only a source-observed wrapper deviation; do not begin from a presumed generic FROST break."},
+      {"id": "separate-claims", "instruction": "Record the paper's construction/security assumptions separately from any challenge-specific nonce reuse, participant substitution, missing validation, or serialization observation."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eprint:2020/852", "title": "FROST: Flexible round-optimized Schnorr threshold signatures", "url": "https://eprint.iacr.org/2020/852", "year": 2020, "section": "Signing protocol, share verification, and security model", "assumptions": ["This source defines and proves the FROST construction under its stated adversary and discrete-log assumptions; it does not assert a generic exploit."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:sekaictf-2025-law-and-order", "title": "law-and-order challenge source", "url": "https://github.com/project-sekai-ctf/sekaictf-2025/blob/683dd81ae520581add40ec21c4819866e28cbde4/crypto/law-and-order/challenge/app/chall.py#L150-L311", "year": 2025, "section": "Pinned threshold-signature wrapper", "assumptions": ["Any wrapper deviation is derived only from this exact source span."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "sekaictf-2025-law-and-order", "event": "SekaiCTF 2025", "year": 2025, "source_kind": "remote", "repo_url": "https://github.com/project-sekai-ctf/sekaictf-2025", "repo_sha": "683dd81ae520581add40ec21c4819866e28cbde4", "source_path": "crypto/law-and-order/challenge/app/chall.py", "source_lines": "L150-L311", "inference_level": "inferred"}
+    ],
+    "verification": [
+      {"kind": "verifier", "instruction": "Verify all public share equations and the final Schnorr signature, then replay the exact wrapper condition used to derive any recovered value or forgery."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.uov.wrapper-structure",
+    "version": 1,
+    "title": "UOV challenge-wrapper structure",
+    "canonical_family_id": "paper.uov-wrapper-structure",
+    "family_aliases": ["UOV wrapper", "unfairy-ring"],
+    "summary": "Model the exact seven-component verifier XOR_i PubMap_i(sig_i)=SHAKE256(msg,44); keep the route blocked until a concrete source-faithful exploit invariant is independently verified.",
+    "parameter_signature": ["signature.scheme", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified", "construction.exploit_invariant_verified"],
+    "signals": [
+      {"id": "uov-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "doi:10.1007/3-540-48910-X_15"}, "weight": 45, "reason": "The original UOV family source is identified."},
+      {"id": "wrapper-public-map", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "xor-public-map-equals-shake256-44"}, "weight": 40, "reason": "The exact challenge surface XORs seven UOV public-map outputs against a 44-byte SHAKE256 target."}
+    ],
+    "requires": [
+      {"id": "verified-uov-wrapper", "when": {"all": [{"fact": "signature.scheme", "op": "eq", "value": "uov-wrapper"}, {"fact": "construction.paper_ids", "op": "contains", "value": "doi:10.1007/3-540-48910-X_15"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/project-sekai-ctf/sekaictf-2025@683dd81ae520581add40ec21c4819866e28cbde4/crypto/unfairy-ring/dist/chall.py:L10-L18"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "xor-public-map-equals-shake256-44"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "bounded-65536-candidate-search"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}, {"fact": "construction.exploit_invariant_verified", "op": "eq", "value": true}]}, "reason": "The exact seven-map XOR verifier, pinned source, bounded exploratory search, and a separately proved exploit invariant are all mandatory; honest toy acceptance alone does not establish an attack."}
+    ],
+    "rejects": [
+      {"id": "wrapper-toy-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The reduced wrapper did not preserve the proposed public-map relation."}
+    ],
+    "negative_matches": [
+      {"id": "bare-uov", "when": {"fact": "signature.scheme", "op": "eq", "value": "uov"}, "reason": "Bare UOV without the observed composition/reuse wrapper is not covered by this challenge-derived card.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "replay-exact-xor-verifier", "instruction": "Evaluate all seven reduced public maps on seven 112-byte components, XOR their 44-byte outputs, and compare exactly with SHAKE256(msg,44); record toy acceptance separately from any exploit invariant.", "max_seconds": 60, "produces_facts": ["construction.toy_invariant_verified", "construction.exploit_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "At most 65536 explicitly justified candidate trials, with seven public-map evaluations and one exact 44-byte XOR comparison per trial; absence of an exploit identity remains blocked."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Multivariate quadratic maps and finite-field linear algebra require an installed Sage runtime."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Build the seven exact public quadratic maps and the source verifier, then run at most 65536 candidates only after stating a concrete algebraic invariant that predicts why one can satisfy the 44-byte target; do not invent rank or triangular identities absent from source-backed derivation."},
+      {"id": "verify-xor-public-map", "instruction": "For every candidate, evaluate each PubMap_i(sig_i), XOR all seven 44-byte outputs, and require equality with SHAKE256(msg,44) under the original challenge parser."},
+      {"id": "separate-construction-and-wrapper", "instruction": "Attribute only UOV definitions to the paper. Mark the zero-solve challenge route blocked unless construction.exploit_invariant_verified is independently observed or derived."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1007/3-540-48910-X_15", "title": "Unbalanced Oil and Vinegar signature schemes", "url": "https://doi.org/10.1007/3-540-48910-X_15", "year": 1999, "section": "UOV central map and parameter structure", "assumptions": ["This citation defines UOV and does not supply an exploit for the challenge wrapper."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:sekaictf-2025-unfairy-ring", "title": "unfairy-ring verifier source", "url": "https://github.com/project-sekai-ctf/sekaictf-2025/blob/683dd81ae520581add40ec21c4819866e28cbde4/crypto/unfairy-ring/dist/chall.py#L10-L18", "year": 2025, "section": "Seven public-map evaluations XORed against SHAKE256(msg,44)", "assumptions": ["This source establishes only the acceptance predicate; no author exploit or solution is claimed."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "sekaictf-2025-unfairy-ring", "event": "SekaiCTF 2025", "year": 2025, "source_kind": "remote", "repo_url": "https://github.com/project-sekai-ctf/sekaictf-2025", "repo_sha": "683dd81ae520581add40ec21c4819866e28cbde4", "source_path": "crypto/unfairy-ring/dist/chall.py", "source_lines": "L10-L18", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "verifier", "instruction": "Evaluate all seven original PubMap_i(sig_i) values, XOR their 44-byte outputs, compare exactly to SHAKE256(msg,44), and report separately whether the candidate came from a verified exploit invariant or only honest signing."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "paper.csidh.auxiliary-point-leak",
+    "version": 1,
+    "title": "CSIDH auxiliary-point wrapper leak",
+    "canonical_family_id": "paper.csidh-auxiliary-point-wrapper",
+    "family_aliases": ["CSIDH point leak", "coast"],
+    "summary": "Recover coast's secret support vector from the divisor (p+1)/ord(G_pub): each secret ell-isogeny contributes ell to the order ratio, while the {-1,0,1} implementation makes the sign immaterial.",
+    "parameter_signature": ["construction.canonical_family", "construction.paper_ids", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "csidh-paper", "when": {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2018/383"}, "weight": 40, "reason": "The source identifies the CSIDH construction family."},
+      {"id": "auxiliary-point-output", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "auxiliary-point-order-divisor-leak"}, "weight": 50, "reason": "The transported point's order ratio reveals the selected prime-degree support."}
+    ],
+    "requires": [
+      {"id": "verified-csidh-point-wrapper", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "paper.csidh.auxiliary-point-leak"}, {"fact": "construction.paper_ids", "op": "contains", "value": "eprint:2018/383"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/README.md:L11-L15"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/maple3142/My-CTF-Challenges@7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/chall.sage:L6-L16"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "auxiliary-point-order-divisor-leak"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "128-prime-degree-tests"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The pinned coast order leak, exact 128-prime source list, 128 prime-degree divisibility tests, source mapping, and exact action replay must be verified directly."}
+    ],
+    "rejects": [
+      {"id": "isogeny-toy-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The proposed auxiliary-point order relation failed on a faithful small-parameter model."}
+    ],
+    "negative_matches": [
+      {"id": "curve-only-public-key", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "curve-only-public-key"}, "reason": "Standard curve-only CSIDH public keys do not expose the challenge-specific auxiliary point.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "auxiliary-order-divisor-toy", "instruction": "On a reduced coast instance compute cf=(p+1)/ord(G_pub), set support bit e_i exactly when ell_i divides cf, and verify that sign-insensitive {-1,0,1} replay reproduces both published curve-plus-point tuples.", "max_seconds": 90, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "One point-order computation, exactly 128 small-prime divisibility tests, one bounded support-vector action replay, and one shared-secret derivation; no backtracking search."},
+    "tooling": [
+      {"command": "sage", "required": true, "packages": [], "reason": "Elliptic-curve, point-order, and isogeny calculations require an installed Sage runtime."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Compute cf=(p+1)/ord(G_pub), recover the 128-entry support vector with e_i=1 iff ell_i divides cf, and use the source defect that action signs in {-1,0,1} are immaterial to reproduce the secret action without search."},
+      {"id": "replay-isogeny-degree-vector", "instruction": "Replay the recovered prime-degree support on both public (E,G) tuples, derive the shared curve-plus-point value j(E)+x(G), derive the AES key, and decrypt the challenge ciphertext."},
+      {"id": "separate-claims", "instruction": "Use ePrint 2018/383 only for CSIDH definitions and security context; label the auxiliary-point disclosure and its exploitable invariant as challenge-derived unless an exact attack theorem is separately cited."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "eprint:2018/383", "title": "CSIDH: An efficient post-quantum commutative group action", "url": "https://eprint.iacr.org/2018/383", "year": 2018, "section": "Supersingular-curve class-group action and public-key representation", "assumptions": ["This source defines CSIDH; the transported-point order leak is challenge-specific."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:imaginaryctf-2024-coast", "title": "coast challenge notes", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/README.md#L11-L15", "year": 2024, "section": "Auxiliary point order loses one prime factor per selected isogeny", "assumptions": ["The exact README span and author solver define the challenge-specific leak."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:imaginaryctf-2024-coast-primes", "title": "coast challenge prime degrees", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/chall.sage#L6-L16", "year": 2024, "section": "Exact 128-prime degree list and support-vector length", "assumptions": ["The hard-gate cardinality is counted from this immutable challenge span."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:imaginaryctf-2024-coast-primes", "title": "coast solution prime degrees", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/solve.sage#L7-L17", "year": 2024, "section": "Independent exact 128-prime list used by the author solver", "assumptions": ["The solution list must match the challenge list exactly."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:imaginaryctf-2024-coast", "title": "coast author solution", "url": "https://github.com/maple3142/My-CTF-Challenges/blob/7b3e786a2c20812f4da23536c7817bdfe8113dd6/ImaginaryCTF%202024/coast/solve.sage#L52-L69", "year": 2024, "section": "Order-ratio support recovery and shared-secret replay", "assumptions": ["The solver is tied to the pinned challenge revision and exponent domain."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "imaginaryctf-2024-coast", "event": "ImaginaryCTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "ImaginaryCTF 2024/coast/README.md", "source_lines": "L11-L15", "inference_level": "inferred"},
+      {"challenge_id": "imaginaryctf-2024-coast-primes", "event": "ImaginaryCTF 2024", "year": 2024, "source_kind": "remote", "repo_url": "https://github.com/maple3142/My-CTF-Challenges", "repo_sha": "7b3e786a2c20812f4da23536c7817bdfe8113dd6", "source_path": "ImaginaryCTF 2024/coast/chall.sage", "source_lines": "L6-L16", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "equation", "instruction": "Reproduce both public (E,G) tuples from the 128-entry support vector, reproduce the shared action and j(E)+x(G), derive the AES key, and decrypt/re-encrypt the exact ciphertext."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "lattice.subset-sum.query-schedule",
+    "version": 1,
+    "title": "Subset-sum recovery from an adaptive query schedule",
+    "canonical_family_id": "lattice.subset-sum-query-schedule",
+    "family_aliases": ["MAT347", "scheduled nonce subset sum"],
+    "summary": "Wrap MAT347's 256-bit counter back to a prior signing state, reuse its nonce for exchange, and solve the custom law s=z*k^-1+x*r, equivalently k*(s-x*r)=z; this is not standard ECDSA.",
+    "parameter_signature": ["construction.canonical_family", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified", "construction.negative_matches_checked"],
+    "signals": [
+      {"id": "query-schedule-family", "when": {"fact": "construction.canonical_family", "op": "eq", "value": "lattice.subset-sum.query-schedule"}, "weight": 70, "reason": "An observed query-schedule reduction identifies this challenge-derived card."},
+      {"id": "adaptive-schedule", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "adaptive-query-schedule"}, "weight": 30, "reason": "State transitions depend on chosen sign/exchange queries rather than independent list samples."}
+    ],
+    "requires": [
+      {"id": "verified-query-subset-sum", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "lattice.subset-sum.query-schedule"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/UofTCTF/uoftctf-2026-chals-public@8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac/mat347/dist/chall.py:L24-L55"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "adaptive-query-schedule"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "nonce-subset-sum"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "mat347-signature-k-times-s-minus-xr-equals-z"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The exact pinned source, custom k*(s-x*r)=z law, state update, permitted query order, subset-sum equation, and faithful toy transcript must all be recorded."}
+    ],
+    "rejects": [
+      {"id": "schedule-relation-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The chosen query sequence did not reproduce the claimed nonce or subset-sum relation."}
+    ],
+    "negative_matches": [
+      {"id": "naive-wagner-routing", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "independent-k-lists"}, "reason": "Independent-list Wagner assumptions conflict with the adaptive stateful schedule and are explicitly rejected for MAT347.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "replay-small-query-schedule", "instruction": "Replay a short sign/exchange sequence, verify the source law s=z*k^-1+x*r and k*(s-x*r)=z, derive every counter increment, and prove the bounded sign-increment/exchange subset sum wraps the 256-bit counter to the first-signature state.", "max_seconds": 30, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "At most 670 authorized queries, one recorded lattice dimension, one LLL/BKZ schedule, and a bounded nearest-vector enumeration."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "Transcript scheduling and exact modular equations can be prepared in Python; an available Sage runtime may be used only for the stated lattice stage."},
+      {"command": "sage", "required": false, "packages": [], "reason": "Optional lattice reduction aid; absence does not justify installation or a different family claim."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Find a bounded multiset of sign increments plus exchanges that wraps the 256-bit counter to the first-signature state, reuse that signature nonce for the final exchange, and for both R=+lift_x(r) and R=-lift_x(r) compute S=(s*R-z*G)*r^-1; accept only the point yielding the exact exchange AES plaintext."},
+      {"id": "reject-wagner", "instruction": "Do not synthesize independent k-lists from adaptive queries; keep paper.wagner.generalized-birthday rejected unless an independent-list reduction is separately proved."}
+    ],
+    "citations": [
+      {"kind": "challenge-source", "paper_id": "challenge:uoftctf-2026-mat347", "title": "MAT347 distributed challenge source", "url": "https://github.com/UofTCTF/uoftctf-2026-chals-public/blob/8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac/mat347/dist/chall.py#L24-L55", "year": 2026, "section": "Stateful RNG, custom signature equation, exchange, and 670-query loop", "assumptions": ["The custom k*(s-x*r)=z law and query-schedule reduction are challenge-derived and must not be replaced by standard ECDSA."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:uoftctf-2026-mat347", "title": "MAT347 author solution", "url": "https://github.com/UofTCTF/uoftctf-2026-chals-public/blob/8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac/mat347/solve/solve.sage#L20-L89", "year": 2026, "section": "Counter wrap, nonce reuse, both point lifts, and exchange decryption", "assumptions": ["The solver is applied only to the pinned source revision and its exact query cap."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "uoftctf-2026-mat347", "event": "UofTCTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/UofTCTF/uoftctf-2026-chals-public", "repo_sha": "8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac", "source_path": "mat347/dist/chall.py", "source_lines": "L24-L55", "inference_level": "inferred"}
+    ],
+    "verification": [
+      {"kind": "transcript-replay", "instruction": "Replay the exact counter wrap, verify every custom equation k*(s-x*r)=z, try both lifted points R, reproduce S=(s*R-z*G)*r^-1, and decrypt/re-encrypt the exchange ciphertext with the accepted shared point."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "stream.lfsr.known-plaintext",
+    "version": 1,
+    "title": "Galois LFSR recovery from aligned known plaintext",
+    "canonical_family_id": "stream.galois-lfsr-known-plaintext",
+    "family_aliases": ["known-plaintext LFSR", "lfstream"],
+    "summary": "XOR aligned known plaintext with ciphertext to expose Galois-LFSR output, recover a recurrence/state, and replay the complete stream.",
+    "parameter_signature": ["prng.family", "prng.output_count", "prng.output_word_bits", "prng.outputs_aligned", "construction.source_anchors", "construction.parameter_signature"],
+    "signals": [
+      {"id": "galois-lfsr", "when": {"fact": "prng.family", "op": "eq", "value": "galois-lfsr"}, "weight": 65, "reason": "The source exposes a right-shift Galois LFSR."},
+      {"id": "known-plaintext", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "known-plaintext"}, "weight": 35, "reason": "Aligned file magic exposes initial keystream words."}
+    ],
+    "requires": [
+      {"id": "aligned-known-keystream", "when": {"all": [{"fact": "prng.family", "op": "eq", "value": "galois-lfsr"}, {"fact": "prng.output_count", "op": "gte", "value": 2}, {"fact": "prng.output_word_bits", "op": "eq", "value": 32}, {"fact": "prng.outputs_aligned", "op": "eq", "value": true}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/BSidesSF/ctf-2026-release@68ee0e460eb572aaec17f082071f8ebf1d6f7330/lfstream/challenge/lfsr_crypt.py:L4-L45"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "known-plaintext"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "state-word-big-endian-one-step-per-block"}]}, "reason": "The pinned source, ciphertext/plaintext alignment, current-state big-endian 32-bit emission, one Galois step per block, and at least two exposed state words must be observed exactly."}
+    ],
+    "rejects": [
+      {"id": "stream-not-aligned", "when": {"fact": "prng.outputs_aligned", "op": "eq", "value": false}, "reason": "Misaligned plaintext does not expose the claimed LFSR word sequence."}
+    ],
+    "negative_matches": [
+      {"id": "mt19937-family", "when": {"fact": "prng.family", "op": "eq", "value": "mt19937"}, "reason": "MT19937 state recovery uses a different recurrence and tempering map.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "png-keystream-prefix", "instruction": "XOR the encrypted prefix with the exact PNG signature/header, interpret 4-byte words in the source's byte order, and verify one recovered Galois step against the next exposed word.", "max_seconds": 10, "produces_facts": ["prng.outputs_aligned", "construction.toy_invariant_verified"]}
+    ],
+    "expected_cost": {"class": "low", "notes": "The template preserves the legacy bounded bitstream search and adds a state-word-be path that recovers a 32-bit state/tap from aligned state transitions in linear time."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled template and a 32-bit GF(2) linear solver need only local Python arithmetic."}
+    ],
+    "template": "assets/solver-templates/lfsr_known_plaintext.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Run the bundled template with schedule state-word-be: XOR the known prefix, parse each current state as a big-endian 32-bit word, recover the tap from odd transitions, validate every even and odd transition, and preserve exact digest/replay checks."},
+      {"id": "decrypt-complete-file", "instruction": "Generate the keystream with the recovered initial state and tap mask, XOR the complete ciphertext, and retain the original encrypted artifact digest."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1109/TIT.1969.1054260", "title": "Shift-register synthesis and BCH decoding", "url": "https://doi.org/10.1109/TIT.1969.1054260", "year": 1969, "section": "Linear shift-register synthesis", "assumptions": ["Enough consecutive exact keystream state is known; the challenge's Galois direction and word schedule come from pinned source."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:bsidessf-2026-lfstream", "title": "lfstream implementation", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/lfstream/challenge/lfsr_crypt.py#L4-L45", "year": 2026, "section": "Current-state big-endian word emission and one Galois step per four-byte block", "assumptions": ["The state-word-be solver path is tied to this exact schedule."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "bsidessf-2026-lfstream", "event": "BSidesSF CTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/BSidesSF/ctf-2026-release", "repo_sha": "68ee0e460eb572aaec17f082071f8ebf1d6f7330", "source_path": "lfstream/challenge/lfsr_crypt.py", "source_lines": "L4-L45", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "exact-file-digest", "instruction": "Replay every LFSR step, reproduce the supplied ciphertext from recovered plaintext, confirm the PNG structure, and compare the plaintext SHA-256 to independent challenge-side evidence when available."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "symmetric.slide.periodic-round",
+    "version": 1,
+    "title": "Slide attack after periodic-round wrapper normalization",
+    "canonical_family_id": "symmetric.periodic-round-slide",
+    "family_aliases": ["slide attack", "tokencrypt"],
+    "summary": "Use the TokenCrypt 16-round chosen-plaintext service to recover its 16-bit Feistel subkey and 24x24 affine layer, then invert the 1024-round, 64-chunk flag path as state=F^-1(state) XOR c.",
+    "parameter_signature": ["construction.canonical_family", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified", "construction.negative_matches_checked"],
+    "signals": [
+      {"id": "periodic-chunk-family", "when": {"fact": "construction.canonical_family", "op": "eq", "value": "symmetric.slide.periodic-round"}, "weight": 65, "reason": "Source analysis identifies a periodic-round slide candidate."},
+      {"id": "counter-wrapped-chunks", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "public-counter-xor-wrapper"}, "weight": 25, "reason": "The public chunk index must be included in the normalized relation."}
+    ],
+    "requires": [
+      {"id": "normalized-slide-relation", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "symmetric.slide.periodic-round"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/BSidesSF/ctf-2026-release@68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/challenge/src/tc_demo.py:L12-L175"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/BSidesSF/ctf-2026-release@68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/challenge/src/tokencrypt.py:L11-L326"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "chosen-16-round-pairs"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "feistel-subkey-16-bit"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "affine-map-24x24"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "flag-1024-rounds-64-chunks"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "public-counter-xor-wrapper"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "Both pinned service and implementation sources, the 16-round oracle, 16-bit subkey, 24x24 affine layer, 64-chunk target, public counter wrapper, and faithful replay are mandatory."}
+    ],
+    "rejects": [
+      {"id": "normalization-probe-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The candidate slid-pair equation failed after applying the actual chunk-index normalization."}
+    ],
+    "negative_matches": [
+      {"id": "bare-round-assumption", "when": {"fact": "construction.negative_matches_checked", "op": "contains", "value": "bare-repeated-round-assumption"}, "reason": "Assuming E=F^r while ignoring the public x XOR c wrapper is explicitly rejected.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "recover-round-and-affine-toy", "instruction": "Collect independent 16-round chosen pairs, brute-force the 16-bit Feistel subkey, solve the 24x24 affine map plus constant from at least 25 augmented pairs, and verify on held-out pairs before touching the 1024-round target.", "max_seconds": 60, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "The pinned solution uses 64 chosen 16-round pairs, at most 2^16 Feistel subkey guesses, one 24x24 affine solve, and exactly 64 inverse chunks for the 1024-round flag token."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The 24-bit public wrapper and chosen-text table can be modeled in bounded local Python code."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Recover the 16-bit Feistel subkey and 24x24 affine layer from the bounded 16-round oracle, then invert the 64 target chunks with the pinned public-counter order."},
+      {"id": "recover-16-bit-subkey", "instruction": "Collect 64 pinned-service 16-round chosen pairs and brute-force only the 16-bit Feistel subkey, rejecting candidates that fail any pair."},
+      {"id": "recover-affine-map", "instruction": "Remove the recovered Feistel core, solve the 24x24 affine matrix and 24-bit constant from independent augmented pairs, require full rank, and verify all held-out 16-round pairs."},
+      {"id": "invert-64-chunks", "instruction": "For the 1024-round flag token, apply the inverse chunk 64 times in reverse counter order using state=F^-1(state) XOR c; preserve the source's public counter normalization exactly."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1007/3-540-45539-6_41", "title": "Advanced slide attacks", "url": "https://www.iacr.org/archive/eurocrypt2000/1807/18070595-new.pdf", "year": 2000, "section": "Self-similar and periodic-key-schedule slide relations", "assumptions": ["The general periodic-round framing is secondary to the pinned author recovery route."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:bsidessf-2026-tokencrypt-service", "title": "TokenCrypt service", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/challenge/src/tc_demo.py#L12-L175", "year": 2026, "section": "16-round chosen encryption and 1024-round flag target", "assumptions": ["The query and target round counts come from this exact service revision."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:bsidessf-2026-tokencrypt-core", "title": "TokenCrypt implementation", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/challenge/src/tokencrypt.py#L11-L326", "year": 2026, "section": "24-bit Feistel, affine layer, counter XOR, encryption and inverse ordering", "assumptions": ["The solver reproduces the exact implementation rather than the one-line dist pointer."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:bsidessf-2026-tokencrypt", "title": "TokenCrypt author solution orchestration", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/solution/solve.py#L1-L124", "year": 2026, "section": "Chosen-pair collection, recovery invocation, and 64 inverse chunks", "assumptions": ["The author route is tied to the pinned service and core implementation."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:bsidessf-2026-tokencrypt-round", "title": "TokenCrypt round recovery implementation", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/tokencrypt/solution/recover_round.py#L134-L178", "year": 2026, "section": "Exact 2^16 subkey loop, 25-vector affine solve, verification, and one-round inverse", "assumptions": ["The exact cost and affine recovery claims come from this immutable implementation span."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "bsidessf-2026-tokencrypt-service", "event": "BSidesSF CTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/BSidesSF/ctf-2026-release", "repo_sha": "68ee0e460eb572aaec17f082071f8ebf1d6f7330", "source_path": "tokencrypt/challenge/src/tc_demo.py", "source_lines": "L12-L175", "inference_level": "direct"},
+      {"challenge_id": "bsidessf-2026-tokencrypt-implementation", "event": "BSidesSF CTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/BSidesSF/ctf-2026-release", "repo_sha": "68ee0e460eb572aaec17f082071f8ebf1d6f7330", "source_path": "tokencrypt/challenge/src/tokencrypt.py", "source_lines": "L11-L326", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "round-trip", "instruction": "Verify the 16-bit subkey and affine map against all held-out 16-round pairs, then replay exactly 64 inverse chunks for the 1024-round target with state=F^-1(state) XOR c and re-encrypt the recovered flag."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "oracle.goldwasser-micali.replication",
+    "version": 1,
+    "title": "Goldwasser-Micali ciphertext replication against a key wrapper",
+    "canonical_family_id": "oracle.gm-replication-wrapper",
+    "family_aliases": ["GM replication", "kproof"],
+    "summary": "Recover the captured 128-bit GM-encrypted transcript key by repeating each captured unknown ciphertext 128 times and classifying the wrapper's hash certificate against precomputed all-zero/all-one outcomes.",
+    "parameter_signature": ["oracle.kind", "oracle.distinguishable_response", "oracle.chosen_ciphertext", "oracle.query_budget", "construction.source_anchors", "construction.parameter_signature"],
+    "signals": [
+      {"id": "gm-key-wrapper", "when": {"fact": "oracle.kind", "op": "eq", "value": "goldwasser-micali-key-wrapper"}, "weight": 75, "reason": "The service decrypts 128 independently submitted GM bits into an AES key."},
+      {"id": "replicated-captured-bits", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "replicate-each-captured-ciphertext-128-times"}, "weight": 25, "reason": "Repeating one captured unknown ciphertext deterministically expands that original transcript bit into a constant AES key."}
+    ],
+    "requires": [
+      {"id": "authorized-gm-wrapper-oracle", "when": {"all": [{"fact": "oracle.kind", "op": "eq", "value": "goldwasser-micali-key-wrapper"}, {"fact": "oracle.distinguishable_response", "op": "eq", "value": true}, {"fact": "oracle.chosen_ciphertext", "op": "eq", "value": true}, {"fact": "oracle.query_budget", "op": "gte", "value": 128}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/BSidesSF/ctf-2026-release@68ee0e460eb572aaec17f082071f8ebf1d6f7330/kproof/challenge/src/kproof.go:L64-L690"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "captured-128-bit-gm-ciphertext-vector"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "replicate-each-captured-ciphertext-128-times"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "hash-certificate-bit-classifier"}]}, "reason": "The pinned wrapper, captured 128-ciphertext vector, stable certificate classifier, and budget for one classification per captured bit are mandatory."}
+    ],
+    "rejects": [
+      {"id": "wrapper-response-not-distinguishable", "when": {"fact": "oracle.distinguishable_response", "op": "eq", "value": false}, "reason": "Without a reproducible acceptance/error class, ciphertext replication yields no wrapper oracle."}
+    ],
+    "negative_matches": [
+      {"id": "cbc-padding-oracle", "when": {"fact": "oracle.kind", "op": "eq", "value": "cbc-padding"}, "reason": "This card targets GM-to-AES key wrapping, not CBC padding validity.", "unknown_policy": "ignore"}
+    ],
+    "cheap_probes": [
+      {"id": "classify-one-captured-bit", "instruction": "Take one captured unknown transcript ciphertext c_i, repeat that exact value 128 times, submit the fixed AES test ciphertext, and classify the returned hash certificate against locally precomputed all-zero and all-one decryptions.", "max_seconds": 30, "produces_facts": ["oracle.distinguishable_response", "construction.toy_invariant_verified"]}
+    ],
+    "expected_cost": {"class": "oracle-bound", "notes": "Exactly 128 captured-bit classification submissions plus local all-zero/all-one hash-certificate preparation and one original transcript replay."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "Public GM arithmetic and a transcript client can be implemented locally with bounded standard-library integers."}
+    ],
+    "template": null,
+    "procedure": [
+      {"id": "solver-outline", "instruction": "Classify each of the 128 captured GM ciphertexts by replication and certificate comparison, assemble the original transcript key, and replay the captured AES payload."},
+      {"id": "replicate-captured-ciphertext", "instruction": "For each of the 128 captured unknown GM ciphertexts, submit a vector containing 128 copies of that same captured value with the fixed AES test ciphertext; do not replace it with attacker-generated known-bit encryptions."},
+      {"id": "classify-hash-certificate", "instruction": "Compare each returned wrapper certificate with the locally precomputed all-zero and all-one AES decrypt/hash outcomes and record the corresponding original transcript bit."},
+      {"id": "recover-transcript-key", "instruction": "Assemble the 128 classified bits in source order into the original AES key, then decrypt and replay the captured transcript under that recovered key."},
+      {"id": "limit-claim", "instruction": "Describe the result as a wrapper misuse of independently decrypting attacker-selected GM bits into an application key; do not claim factorization, GM decryption, or a contradiction of the original semantic-security theorem."}
+    ],
+    "citations": [
+      {"kind": "paper", "paper_id": "doi:10.1016/0022-0000(84)90070-9", "title": "Probabilistic encryption", "url": "https://doi.org/10.1016/0022-0000(84)90070-9", "year": 1984, "section": "Quadratic-residuosity bit encryption", "assumptions": ["The paper defines GM; the transcript-key classifier is a challenge-wrapper misuse, not a break of GM semantic security."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-source", "paper_id": "challenge:bsidessf-2026-kproof", "title": "kproof wrapper implementation", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/kproof/challenge/src/kproof.go#L64-L690", "year": 2026, "section": "128 GM key bits, AES payload, and hash-certificate wrapper response", "assumptions": ["The captured vector and response classification use this exact revision."], "verified_on": "2026-08-21"},
+      {"kind": "challenge-solution", "paper_id": "solution:bsidessf-2026-kproof", "title": "kproof author solution", "url": "https://github.com/BSidesSF/ctf-2026-release/blob/68ee0e460eb572aaec17f082071f8ebf1d6f7330/kproof/solution/solve.py#L77-L157", "year": 2026, "section": "Repeat each captured unknown bit and recover the original AES key", "assumptions": ["The attack follows the pinned transcript and wrapper behavior."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "bsidessf-2026-kproof", "event": "BSidesSF CTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/BSidesSF/ctf-2026-release", "repo_sha": "68ee0e460eb572aaec17f082071f8ebf1d6f7330", "source_path": "kproof/challenge/src/kproof.go", "source_lines": "L64-L690", "inference_level": "direct"}
+    ],
+    "verification": [
+      {"kind": "transcript-replay", "instruction": "Replay all 128 captured-bit classifications, reconstruct the exact original transcript key, and decrypt/re-encrypt the original AES-CBC transcript; known-key controls alone are not proof."}
+    ]
+  },
+  {
+    "schema_version": 2,
+    "id": "symmetric.rotor.group-conjugacy",
+    "version": 1,
+    "title": "Rotor wiring recovery by observed permutation conjugacy",
+    "canonical_family_id": "symmetric.rotor-permutation-conjugacy",
+    "family_aliases": ["Rotor Cipher", "permutation conjugacy"],
+    "summary": "Recover rotor or plugboard permutations only after deriving an exact conjugacy relation from known mappings in the challenge log; this is a challenge-derived group model.",
+    "parameter_signature": ["construction.canonical_family", "construction.source_anchors", "construction.parameter_signature", "construction.toy_invariant_verified"],
+    "signals": [
+      {"id": "rotor-conjugacy-family", "when": {"fact": "construction.canonical_family", "op": "eq", "value": "symmetric.rotor.group-conjugacy"}, "weight": 70, "reason": "Source and log analysis identify a permutation-conjugacy recovery problem."},
+      {"id": "observed-conjugacy", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "observed-permutation-conjugacy"}, "weight": 30, "reason": "Known plaintext/ciphertext mappings support an exact conjugacy equation."}
+    ],
+    "requires": [
+      {"id": "verified-rotor-conjugacy", "when": {"all": [{"fact": "construction.canonical_family", "op": "eq", "value": "symmetric.rotor.group-conjugacy"}, {"fact": "construction.source_anchors", "op": "contains", "value": "github.com/UofTCTF/uoftctf-2026-chals-public@8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac/rotor-cipher/rotor_cipher.py:L46-L149"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "observed-permutation-conjugacy"}, {"fact": "construction.parameter_signature", "op": "contains", "value": "known-symbol-mappings"}, {"fact": "construction.toy_invariant_verified", "op": "eq", "value": true}]}, "reason": "The stepping convention, known mappings, exact pinned source, and a faithful permutation-conjugacy toy system must be established."}
+    ],
+    "rejects": [
+      {"id": "conjugacy-toy-failed", "when": {"fact": "construction.toy_invariant_verified", "op": "eq", "value": false}, "reason": "The proposed conjugator did not reproduce the reduced training equations."}
+    ],
+    "negative_matches": [
+      {"id": "frequency-only-route", "when": {"fact": "construction.parameter_signature", "op": "contains", "value": "frequency-only"}, "reason": "Independent known mappings and rotor states make exact permutation equations preferable to language-frequency guessing.", "unknown_policy": "block"}
+    ],
+    "cheap_probes": [
+      {"id": "six-symbol-conjugacy", "instruction": "Project source-derived rotor/reflector mappings to six symbols, enumerate at most 6! conjugators, and require one candidate to satisfy all training equations plus independent symbol replays.", "max_seconds": 10, "produces_facts": ["construction.toy_invariant_verified", "construction.negative_matches_checked"]}
+    ],
+    "expected_cost": {"class": "high", "notes": "The bundled template enumerates at most 8! toy permutations; the 26-symbol adaptation must use cycle constraints, known mappings, and bounded branching rather than factorial enumeration."},
+    "tooling": [
+      {"command": "python3", "required": true, "packages": [], "reason": "The bundled template implements exact finite-permutation composition and conjugacy checks."}
+    ],
+    "template": "assets/solver-templates/rotor_group_conjugacy.py",
+    "procedure": [
+      {"id": "adapt-template", "instruction": "Validate the conjugacy model with the bounded template, then adapt to 26 symbols by deriving cycle-structure constraints from logged known mappings, branching only over unresolved cycle correspondences, and replaying all held-out mappings."},
+      {"id": "map-source-stepping", "instruction": "Use the source's rotate-before-encrypt convention, rotor order, positions, plugboard involution, forward rotors, reflector, inverse rotors, and final plugboard exactly; do not substitute a generic Enigma model."}
+    ],
+    "citations": [
+      {"kind": "challenge-source", "paper_id": "challenge:uoftctf-2026-rotor-cipher", "title": "Rotor Cipher challenge source", "url": "https://github.com/UofTCTF/uoftctf-2026-chals-public/blob/8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac/rotor-cipher/rotor_cipher.py#L46-L149", "year": 2026, "section": "Permutation matrices, stepping, encryption, and logged known mappings", "assumptions": ["The conjugacy reduction is derived from this exact challenge implementation and log structure; no external paper is claimed to prove the wrapper mapping."], "verified_on": "2026-08-21"}
+    ],
+    "examples": [
+      {"challenge_id": "uoftctf-2026-rotor-cipher", "event": "UofTCTF 2026", "year": 2026, "source_kind": "remote", "repo_url": "https://github.com/UofTCTF/uoftctf-2026-chals-public", "repo_sha": "8519e2bb29b3e49b0e48a2078728f9fc6e6cb0ac", "source_path": "rotor-cipher/rotor_cipher.py", "source_lines": "L46-L149", "inference_level": "inferred"}
+    ],
+    "verification": [
+      {"kind": "verifier", "instruction": "Verify every recovered permutation is bijective, the reflector/plugboard are involutions where required, all conjugacy equations hold, and the original implementation reproduces every independent log mapping and flag-format wiring."}
+    ]
+  }
+]

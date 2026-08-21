@@ -1,8 +1,9 @@
 # Zest skills
 
 Agent skills for [Zest](https://github.com/SEORY0/zest) — a local-first data and security
-workbench. Encode, decode, hash, encrypt, decompress and analyse data without anything leaving
-the machine.
+workbench. Core, CLI and browser byte processing stay local by default; `zest-crypto` reaches
+public papers or challenge/oracle endpoints only with explicit user or case authorization, never
+automatically.
 
 ## Install
 
@@ -14,6 +15,7 @@ To install just one:
 
 ```bash
 npx skills add SEORY0/zest-skill --skill zest
+npx skills add SEORY0/zest-skill --skill zest-crypto
 npx skills add SEORY0/zest-skill --skill zest-ctf
 npx skills add SEORY0/zest-skill --skill zest-triage
 ```
@@ -23,6 +25,7 @@ npx skills add SEORY0/zest-skill --skill zest-triage
 | Skill | For |
 | --- | --- |
 | [`zest`](skills/zest/SKILL.md) | Encode, decode, hash, encrypt, decrypt and inspect data with the local `zest` CLI. |
+| [`zest-crypto`](skills/zest-crypto/SKILL.md) | Analyze and solve math-heavy or paper-derived CTF cryptography involving RSA, ECC, lattices, signatures, PRNGs, stream ciphers, custom constructions, or crypto oracles. |
 | [`zest-ctf`](skills/zest-ctf/SKILL.md) | Solve CTF challenge artifacts with the local `zest` CLI when the task asks to find a flag, decode nested encodings, inspect obfuscated bytes, or triage crypto/misc/light-forensics/reversing puzzle data. |
 | [`zest-triage`](skills/zest-triage/SKILL.md) | Triage an unknown or suspicious artefact — a file, a captured blob, a log, a phishing mail, an obfuscated string — using the local `zest` CLI. |
 
